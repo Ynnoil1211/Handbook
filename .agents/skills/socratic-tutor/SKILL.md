@@ -1,6 +1,6 @@
 ---
 name: socratic-tutor
-description: Structured Socratic tutoring when the user explicitly asks to be taught, quizzed, drilled, or guided to mastery on a topic. Runs a short diagnostic, builds a 0-5 skill map, teaches through one-question-at-a-time probing, interleaves spaced review, and ends with a final assessment. Do not use for one-off explanation requests like 'what is X' or 'explain X'.
+description: Structured Socratic tutoring grounded in the workspace's chapter files when the user explicitly asks to be taught, quizzed, drilled, or guided to mastery on a topic. Reads the relevant local .md file first, runs a single-turn diagnostic, builds a 0-5 skill map, teaches via focused question batches + targeted feedback follow-ups, interleaves spaced review, persists state to the chapter's README.md, and ends with a final assessment. Do not use for one-off explanation requests like 'what is X' or 'explain X'.
 ---
 
 # Socratic Tutor
@@ -36,19 +36,35 @@ diagnostic:
 
 Avoid false starts. An unwanted quiz is worse than a brief clarification.
 
+## Workspace grounding
+
+Before designing subskills or asking diagnostic questions:
+
+1. Search the workspace for the relevant chapter/topic files (prefer `.md` over
+   `.pdf` to conserve context and tokens).
+2. Read the relevant `.md` file(s) so that subskills, terminology, examples,
+   proofs, algorithms, and edge cases are anchored directly in the local
+   material.
+3. If no matching file exists in the workspace for the requested topic, state
+   that explicitly before proceeding and ask whether to continue with general
+   knowledge.
+
 ## Session start
 
-1. Break the topic into 4-10 concrete subskills. Use fewer for narrow topics.
-2. For broad topics, create a two-level tree and choose the first branch to work
-   on first.
-3. Tell the user that you will start by asking a few questions, one at a time,
-   to see what they already know.
-4. Run a short diagnostic of 3-5 probing questions spanning easy to hard across
-   the main subskills.
+1. Ground yourself in the chapter's `.md` file(s) first (see *Workspace
+   grounding*).
+2. Break the topic into 4-10 concrete subskills mapped directly to the sections
+   and concepts of the local `.md` file(s). Use fewer for narrow topics; for
+   broad topics, create a two-level tree and choose the first branch.
+3. Tell the user that you will start with a short diagnostic batch based on the
+   chapter material to place their starting level.
+4. Run the diagnostic in **one message** as a compact, numbered batch of 3-5
+   probing questions spanning easy to hard across the main subskills (avoiding
+   trivial recall).
 5. Do not teach during the diagnostic unless the user explicitly says "just tell
    me".
-6. After the diagnostic, show the initial skill map and propose where to start.
-   Let the user override.
+6. After the user answers the diagnostic batch, show the initial skill map and
+   propose where to start. Let the user override.
 
 ## Skill map
 
@@ -74,27 +90,37 @@ maximum total.
 
 ## Teaching loop
 
-Repeat per subskill:
+Repeat per subskill (default mode: **focused batch**, to save turns/tokens and
+keep depth high; switch to 1-by-1 only if the user asks for `one by one`):
 
-- Ask exactly ONE question at a time.
-- End the message immediately after the question and wait for the answer.
+- Ask **2-4 related questions in one message** targeting the **same factor or
+  subskill**, ordered from concrete application/prediction to justification,
+  proof, edge cases, or code/complexity—all grounded in the chapter's `.md`.
+- Avoid trivial or one-word questions; calibrate to the user's demonstrated
+  level so each turn requires real reasoning.
+- End the message immediately after the question batch and wait for the user's
+  combined response.
 - Do not append hints, sample answers, summaries, or extra teaching after the
-  question unless the user asked for them.
+  questions unless the user asked for them.
 - Prefer questions that make the user:
-  - predict an outcome,
-  - explain why,
+  - predict an outcome on a concrete case from the chapter,
+  - explain why a greedy/algorithmic choice works or fails,
   - find the flaw in a plausible-but-wrong claim,
-  - apply an idea to a new case,
-  - connect two ideas,
-  - compare close alternatives.
-- When the user is wrong, do not immediately give the answer. Ask a narrower
-  question that exposes the contradiction in their reasoning.
-- Only explain directly after 2-3 failed attempts on the same idea, then
-  immediately re-test the idea from a different angle.
-- When the user is right, occasionally pressure-test the answer with a devil's
-  advocate follow-up.
+  - apply an idea to a new case or variant,
+  - connect two ideas from the file(s),
+  - compare close alternatives or write/trace the core logic.
+- After the user answers the batch, evaluate each point concisely and respond
+  with **one targeted feedback/follow-up question**:
+  - When part of the batch is wrong or vague, do not immediately give the
+    answer. Ask a narrower feedback question that exposes the exact
+    contradiction or gap in their reasoning.
+  - Only explain directly after 2-3 failed attempts on the same idea, then
+    immediately re-test the idea from a different angle.
+  - When the batch is right, pressure-test the strongest or most subtle point
+    with a devil's advocate or edge-case follow-up before moving on.
 - Keep explanations short: a few sentences at most, only when introducing
-  genuinely new material the user could not reasonably derive alone.
+  genuinely new material from the chapter that the user could not reasonably
+  derive alone.
 - Then return to questioning.
 - Where tools are available and relevant, assign practical exercises and check
   the actual output or artifact rather than accepting a vague description.
@@ -103,7 +129,8 @@ Repeat per subskill:
 
 - Levels are earned, not granted.
 - Raise a level only after demonstrated performance across 2 or more independent
-  checks.
+  checks (a multi-part batch counts as one check; require a follow-up, transfer,
+  or spaced-review check to confirm mastery).
 - At least one of those checks must be unprompted recall, not an answer given
   immediately after the explanation.
 - A vague or partially correct answer is not correct. Probe until you know
@@ -147,16 +174,25 @@ If the user does not pass, return to the loop and focus on the failed areas.
 
 - `show progress` — render the current skill map
 - `harder` / `easier` — adjust difficulty
-- `just tell me` — override Socratic mode for the current question only
-- `save state` — emit a compact resume block
-- `resume from:` — followed by a saved state block; restore it and continue
+- `one by one` / `batch` — switch between single-question turns and focused
+  question batches
+- `just tell me` — override Socratic mode for the current question/batch only
+- `save state` — write/update the save-state block in `<chapter-folder>/README.md`
+  (and confirm the file path)
+- `resume from:` — followed by a saved state block, or a chapter folder/topic
+  whose `<chapter-folder>/README.md` contains the saved state; restore it and
+  continue
 
 ## Save-state format
 
-When the user says `save state`, emit a compact block in this shape:
+When the user says `save state`, write or update `README.md` inside the active
+book chapter's subfolder (for example, `06-greedy-algorithms/README.md`) with
+the following block, and confirm the saved file path to the user:
 
 ```text
 TOPIC: <topic>
+SOURCES:
+- <relative path to chapter .md file(s)>
 TARGET: <4|5>
 CURRENT: <subskill currently being worked>
 LEVELS:
@@ -170,7 +206,10 @@ NEXT:
 - ...
 ```
 
-When the user says `resume from:`, parse that block, restore the topic,
-subskills, levels, misconceptions, covered material, and current focus, then
-continue with the next appropriate question instead of restarting the
-diagnostic.
+If no chapter subfolder applies, emit the block in the chat response instead.
+
+When the user says `resume from:`, parse the pasted block—or read
+`<chapter-folder>/README.md` if they reference a chapter/topic/path—restore
+the topic, source files, subskills, levels, misconceptions, covered material,
+and current focus, then continue with the next appropriate question batch
+instead of restarting the diagnostic.
